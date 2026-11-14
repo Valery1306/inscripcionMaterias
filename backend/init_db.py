@@ -18,7 +18,16 @@ Este script se ejecuta al arrancar el contenedor del backend
      tolerando que PostgreSQL todavía esté arrancando.
   3. Aplica DDL ``CREATE TABLE IF NOT EXISTS`` para TODAS las tablas del
      sistema, en orden de dependencias, más índices útiles.
-  4. Verifica que las tablas existan e imprime un resumen con el número de
+  4. Migra de forma idempotente las bases creadas con el esquema anterior
+     (``ALTER TABLE ... ADD COLUMN IF NOT EXISTS``). El esquema nuevo añade
+     ``curso.programa/semestre/horas``, ``docente``, ``sede``,
+     ``nrc.periodo/docente_id/sede_id/inscritos/saldo/estado``,
+     ``horario.salon/edificio`` y
+     ``estudiante_perfil.programa/jornada/sede``. También convierte
+     ``estudiante.plan_id`` a TEXT (el plan se identifica como ``'IS-2024'``)
+     y relaja los ``NOT NULL`` históricos para que la ingesta pueda cargar
+     datos parciales; esto no borra ni modifica filas.
+  5. Verifica que las tablas existan e imprime un resumen con el número de
      filas de cada una.
 
 Es seguro ejecutarlo múltiples veces: NO borra ni modifica datos existentes
@@ -57,10 +66,12 @@ DB_CONFIG_POR_DEFECTO: Dict[str, object] = {
 # Tablas que la API y la ingesta esperan encontrar (nombres en minúsculas:
 # PostgreSQL pliega a minúsculas los identificadores sin comillas).
 TABLAS_ESPERADAS: Tuple[str, ...] = (
-    "estudiante",
     "curso",
+    "docente",
+    "sede",
     "nrc",
     "horario",
+    "estudiante",
     "inscripcion",
     "historial",
     "estudiante_perfil",
@@ -76,22 +87,33 @@ TABLAS_ESPERADAS: Tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 DDL_TABLAS: Tuple[Tuple[str, str], ...] = (
     (
-        "estudiante",
-        """
-        CREATE TABLE IF NOT EXISTS estudiante (
-            id      SERIAL PRIMARY KEY,
-            nombre  TEXT NOT NULL,
-            plan_id INTEGER NOT NULL
-        )
-        """,
-    ),
-    (
         "curso",
         """
         CREATE TABLE IF NOT EXISTS curso (
             codigo_alfanumerico VARCHAR(10) PRIMARY KEY,
-            nombre              TEXT NOT NULL,
-            creditos            INTEGER NOT NULL
+            nombre              TEXT,
+            creditos            INTEGER,
+            semestre            INTEGER,
+            programa            TEXT,
+            horas               INTEGER
+        )
+        """,
+    ),
+    (
+        "docente",
+        """
+        CREATE TABLE IF NOT EXISTS docente (
+            id_docente TEXT PRIMARY KEY,
+            nombre     TEXT
+        )
+        """,
+    ),
+    (
+        "sede",
+        """
+        CREATE TABLE IF NOT EXISTS sede (
+            codigo TEXT PRIMARY KEY,
+            nombre TEXT
         )
         """,
     ),
@@ -99,11 +121,17 @@ DDL_TABLAS: Tuple[Tuple[str, str], ...] = (
         "nrc",
         """
         CREATE TABLE IF NOT EXISTS nrc (
-            id_nrc    INTEGER PRIMARY KEY,
-            curso_id  VARCHAR(10) NOT NULL REFERENCES curso (codigo_alfanumerico),
-            jornada   TEXT NOT NULL,
-            modalidad TEXT NOT NULL,
-            cupo_max  INTEGER NOT NULL
+            id_nrc     INTEGER PRIMARY KEY,
+            curso_id   VARCHAR(10) REFERENCES curso (codigo_alfanumerico),
+            periodo    TEXT,
+            docente_id TEXT,
+            sede_id    TEXT,
+            jornada    TEXT,
+            modalidad  TEXT,
+            cupo_max   INTEGER,
+            inscritos  INTEGER,
+            saldo      INTEGER,
+            estado     TEXT
         )
         """,
     ),
@@ -112,11 +140,23 @@ DDL_TABLAS: Tuple[Tuple[str, str], ...] = (
         """
         CREATE TABLE IF NOT EXISTS horario (
             id            SERIAL PRIMARY KEY,
-            nrc_id        INTEGER NOT NULL REFERENCES nrc (id_nrc),
-            numero_sesion INTEGER NOT NULL,
-            dia           INTEGER NOT NULL,
-            hora_inicio   TIME NOT NULL,
-            hora_fin      TIME NOT NULL
+            nrc_id        INTEGER REFERENCES nrc (id_nrc),
+            numero_sesion INTEGER,
+            dia           INTEGER,
+            hora_inicio   TIME,
+            hora_fin      TIME,
+            salon         TEXT,
+            edificio      TEXT
+        )
+        """,
+    ),
+    (
+        "estudiante",
+        """
+        CREATE TABLE IF NOT EXISTS estudiante (
+            id      SERIAL PRIMARY KEY,
+            nombre  TEXT,
+            plan_id TEXT
         )
         """,
     ),
@@ -126,7 +166,7 @@ DDL_TABLAS: Tuple[Tuple[str, str], ...] = (
         CREATE TABLE IF NOT EXISTS inscripcion (
             estudiante_id INTEGER NOT NULL REFERENCES estudiante (id),
             nrc_id        INTEGER NOT NULL REFERENCES nrc (id_nrc),
-            fecha         DATE NOT NULL,
+            fecha         DATE,
             PRIMARY KEY (estudiante_id, nrc_id)
         )
         """,
@@ -147,7 +187,10 @@ DDL_TABLAS: Tuple[Tuple[str, str], ...] = (
         CREATE TABLE IF NOT EXISTS estudiante_perfil (
             estudiante_id INTEGER PRIMARY KEY,
             carrera       TEXT,
-            semestre      INTEGER
+            semestre      INTEGER,
+            programa      TEXT,
+            jornada       TEXT,
+            sede          TEXT
         )
         """,
     ),
@@ -160,6 +203,75 @@ DDL_TABLAS: Tuple[Tuple[str, str], ...] = (
             PRIMARY KEY (estudiante_id, codigo_curso)
         )
         """,
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# Migraciones idempotentes para bases creadas con ``schema.sql`` (esquema
+# anterior). ``ADD COLUMN IF NOT EXISTS`` es no destructivo. Los ``DROP NOT
+# NULL`` alinean la base existente con el esquema nuevo (columnas opcionales
+# que la ingesta puede omitir); no borran ni reescriben filas.
+# ---------------------------------------------------------------------------
+DDL_MIGRACIONES: Tuple[Tuple[str, str], ...] = (
+    # curso: nuevas columnas del plan de estudios.
+    ("curso.semestre", "ALTER TABLE curso ADD COLUMN IF NOT EXISTS semestre INTEGER"),
+    ("curso.programa", "ALTER TABLE curso ADD COLUMN IF NOT EXISTS programa TEXT"),
+    ("curso.horas", "ALTER TABLE curso ADD COLUMN IF NOT EXISTS horas INTEGER"),
+    ("curso.nombre_null", "ALTER TABLE curso ALTER COLUMN nombre DROP NOT NULL"),
+    ("curso.creditos_null", "ALTER TABLE curso ALTER COLUMN creditos DROP NOT NULL"),
+    # nrc: periodo, docente, sede y contadores desnormalizados.
+    ("nrc.periodo", "ALTER TABLE nrc ADD COLUMN IF NOT EXISTS periodo TEXT"),
+    ("nrc.docente_id", "ALTER TABLE nrc ADD COLUMN IF NOT EXISTS docente_id TEXT"),
+    ("nrc.sede_id", "ALTER TABLE nrc ADD COLUMN IF NOT EXISTS sede_id TEXT"),
+    ("nrc.inscritos", "ALTER TABLE nrc ADD COLUMN IF NOT EXISTS inscritos INTEGER"),
+    ("nrc.saldo", "ALTER TABLE nrc ADD COLUMN IF NOT EXISTS saldo INTEGER"),
+    ("nrc.estado", "ALTER TABLE nrc ADD COLUMN IF NOT EXISTS estado TEXT"),
+    ("nrc.curso_id_null", "ALTER TABLE nrc ALTER COLUMN curso_id DROP NOT NULL"),
+    ("nrc.jornada_null", "ALTER TABLE nrc ALTER COLUMN jornada DROP NOT NULL"),
+    ("nrc.modalidad_null", "ALTER TABLE nrc ALTER COLUMN modalidad DROP NOT NULL"),
+    ("nrc.cupo_max_null", "ALTER TABLE nrc ALTER COLUMN cupo_max DROP NOT NULL"),
+    # horario: salón/edificio y columnas opcionales.
+    ("horario.salon", "ALTER TABLE horario ADD COLUMN IF NOT EXISTS salon TEXT"),
+    ("horario.edificio", "ALTER TABLE horario ADD COLUMN IF NOT EXISTS edificio TEXT"),
+    ("horario.nrc_id_null", "ALTER TABLE horario ALTER COLUMN nrc_id DROP NOT NULL"),
+    (
+        "horario.numero_sesion_null",
+        "ALTER TABLE horario ALTER COLUMN numero_sesion DROP NOT NULL",
+    ),
+    ("horario.dia_null", "ALTER TABLE horario ALTER COLUMN dia DROP NOT NULL"),
+    (
+        "horario.hora_inicio_null",
+        "ALTER TABLE horario ALTER COLUMN hora_inicio DROP NOT NULL",
+    ),
+    (
+        "horario.hora_fin_null",
+        "ALTER TABLE horario ALTER COLUMN hora_fin DROP NOT NULL",
+    ),
+    # estudiante: nombre/plan_id opcionales (la API siempre los informa).
+    ("estudiante.nombre_null", "ALTER TABLE estudiante ALTER COLUMN nombre DROP NOT NULL"),
+    # El plan se identifica por código ('IS-2024'), no por un entero. La
+    # conversión USING es idempotente: si la columna ya es TEXT, PostgreSQL la
+    # deja igual y conserva las filas existentes.
+    (
+        "estudiante.plan_id_text",
+        "ALTER TABLE estudiante ALTER COLUMN plan_id TYPE TEXT "
+        "USING plan_id::text",
+    ),
+    ("estudiante.plan_id_null", "ALTER TABLE estudiante ALTER COLUMN plan_id DROP NOT NULL"),
+    # inscripcion: la fecha la pone CURRENT_DATE, pero se permite NULL.
+    ("inscripcion.fecha_null", "ALTER TABLE inscripcion ALTER COLUMN fecha DROP NOT NULL"),
+    # estudiante_perfil: programa/jornada/sede del nuevo flujo.
+    (
+        "estudiante_perfil.programa",
+        "ALTER TABLE estudiante_perfil ADD COLUMN IF NOT EXISTS programa TEXT",
+    ),
+    (
+        "estudiante_perfil.jornada",
+        "ALTER TABLE estudiante_perfil ADD COLUMN IF NOT EXISTS jornada TEXT",
+    ),
+    (
+        "estudiante_perfil.sede",
+        "ALTER TABLE estudiante_perfil ADD COLUMN IF NOT EXISTS sede TEXT",
     ),
 )
 
@@ -202,6 +314,46 @@ DDL_INDICES: Tuple[Tuple[str, str], ...] = (
     (
         "idx_nrc_curso_id",
         "CREATE INDEX IF NOT EXISTS idx_nrc_curso_id ON nrc (curso_id)",
+    ),
+    # Filtros del nuevo flujo: periodo, sede, jornada, docente y estado.
+    (
+        "idx_nrc_periodo",
+        "CREATE INDEX IF NOT EXISTS idx_nrc_periodo ON nrc (periodo)",
+    ),
+    (
+        "idx_nrc_sede_id",
+        "CREATE INDEX IF NOT EXISTS idx_nrc_sede_id ON nrc (sede_id)",
+    ),
+    (
+        "idx_nrc_jornada",
+        "CREATE INDEX IF NOT EXISTS idx_nrc_jornada ON nrc (jornada)",
+    ),
+    (
+        "idx_nrc_docente_id",
+        "CREATE INDEX IF NOT EXISTS idx_nrc_docente_id ON nrc (docente_id)",
+    ),
+    (
+        "idx_nrc_estado",
+        "CREATE INDEX IF NOT EXISTS idx_nrc_estado ON nrc (estado)",
+    ),
+    # Catálogo por programa (GET /api/catalogos y malla del estudiante).
+    (
+        "idx_curso_programa",
+        "CREATE INDEX IF NOT EXISTS idx_curso_programa ON curso (programa)",
+    ),
+    (
+        "idx_curso_semestre",
+        "CREATE INDEX IF NOT EXISTS idx_curso_semestre ON curso (semestre)",
+    ),
+    # Sesiones por día (consulta de choques) y perfil por programa.
+    (
+        "idx_horario_dia",
+        "CREATE INDEX IF NOT EXISTS idx_horario_dia ON horario (dia)",
+    ),
+    (
+        "idx_estudiante_perfil_programa",
+        "CREATE INDEX IF NOT EXISTS idx_estudiante_perfil_programa "
+        "ON estudiante_perfil (programa)",
     ),
 )
 
@@ -333,13 +485,18 @@ def aplicar_esquema(conexion) -> None:
     """
     Ejecuta todo el DDL idempotente en una sola transacción.
 
-    No elimina ni altera datos existentes: ``CREATE ... IF NOT EXISTS`` solo
-    crea objetos que falten.
+    No elimina ni altera datos existentes: ``CREATE ... IF NOT EXISTS`` y
+    ``ALTER ... ADD COLUMN IF NOT EXISTS`` solo crean objetos que falten. Los
+    ``DROP NOT NULL`` relajan restricciones heredadas del esquema anterior,
+    pero nunca borran filas.
     """
     with conexion:  # COMMIT al salir; ROLLBACK si algo falla.
         with conexion.cursor() as cursor:
             for nombre, sentencia in DDL_TABLAS:
                 logger.debug("Creando/verificando tabla %s", nombre)
+                cursor.execute(sentencia)
+            for nombre, sentencia in DDL_MIGRACIONES:
+                logger.debug("Aplicando migración %s", nombre)
                 cursor.execute(sentencia)
             for nombre, sentencia in DDL_INDICES:
                 logger.debug("Creando/verificando índice %s", nombre)
@@ -397,6 +554,10 @@ def imprimir_resumen(
     print(
         f"[init_db] Índices declarados: {len(DDL_INDICES)} "
         f"(CREATE INDEX IF NOT EXISTS)"
+    )
+    print(
+        f"[init_db] Migraciones idempotentes: {len(DDL_MIGRACIONES)} "
+        f"(ADD COLUMN IF NOT EXISTS / ALTER COLUMN TYPE / DROP NOT NULL)"
     )
 
 

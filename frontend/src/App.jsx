@@ -1,326 +1,192 @@
-import { useCallback, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
+import AdminPanel from './components/AdminPanel.jsx'
+import EstudiantePanel from './components/EstudiantePanel.jsx'
 import Login from './components/Login.jsx'
-import OfertaTable from './components/OfertaTable.jsx'
-import Horario from './components/Horario.jsx'
-import GenerarHorario from './components/GenerarHorario.jsx'
-import AdminReglas from './components/AdminReglas.jsx'
-import MatrizEstudiante from './components/MatrizEstudiante.jsx'
-import SubirOferta from './components/SubirOferta.jsx'
-import OfertaAdmin from './components/OfertaAdmin.jsx'
-import Banner from './components/Banner.jsx'
-import Spinner from './components/Spinner.jsx'
-import {
-  API_BASE,
-  apiGet,
-  apiGetOpcional,
-  apiPost,
-  esErrorDeConexion,
-  listaDeObjetos,
-} from './api.js'
+import { API_BASE } from './api.js'
 
-const CLASE_TAB_ACTIVA = 'bg-white text-indigo-800 shadow'
-const CLASE_TAB_INACTIVA = 'text-indigo-100 hover:bg-indigo-600 hover:text-white'
+// ---------------------------------------------------------------------------
+// Shell de la aplicación.
+//
+// La sesión se guarda en localStorage para sobrevivir a una recarga. Según el
+// rol, se muestra uno de los dos paneles autocontenidos:
+//   * admin      -> AdminPanel (cargas, oferta, reglas, estudiantes)
+//   * estudiante -> EstudiantePanel (perfil + horario automático)
+//
+// Todas las peticiones al backend viven en los paneles y usan src/api.js con
+// rutas relativas /api.
+// ---------------------------------------------------------------------------
+
+const CLAVE_SESION = 'inscripcion-materias.sesion'
+const ROLES = new Set(['admin', 'estudiante'])
+
+function texto(valor) {
+  if (valor == null) return ''
+  return String(valor).trim()
+}
+
+/**
+ * Valida y normaliza una sesión (recién creada o recuperada de localStorage).
+ * Devuelve null si no es utilizable para que App vuelva al login.
+ */
+function normalizarSesion(valor) {
+  if (!valor || typeof valor !== 'object' || Array.isArray(valor)) return null
+
+  const rol = valor.rol
+  if (!ROLES.has(rol)) return null
+
+  const token =
+    typeof valor.token === 'string' && valor.token.trim()
+      ? valor.token
+      : valor.token ?? null
+  const nombre = texto(valor.nombre)
+
+  if (rol === 'admin') {
+    return {
+      rol: 'admin',
+      estudianteId: null,
+      nombre: nombre || 'Administrador',
+      token,
+    }
+  }
+
+  const id = Number(valor.estudianteId ?? valor.estudiante_id)
+  if (!Number.isSafeInteger(id) || id <= 0) return null
+
+  return {
+    rol: 'estudiante',
+    estudianteId: id,
+    nombre: nombre || `Estudiante #${String(id)}`,
+    token,
+  }
+}
+
+function leerSesion() {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const guardada = window.localStorage?.getItem(CLAVE_SESION)
+    if (!guardada) return null
+    return normalizarSesion(JSON.parse(guardada))
+  } catch {
+    // localStorage puede fallar en modo privado o con un valor corrupto.
+    return null
+  }
+}
 
 export default function App() {
-  const [vista, setVista] = useState('estudiante') // 'estudiante' | 'admin'
-  const [estudianteId, setEstudianteId] = useState(null)
-  const [oferta, setOferta] = useState([])
-  const [horario, setHorario] = useState([])
-  const [cargando, setCargando] = useState(false)
-  const [inscribiendoNrc, setInscribiendoNrc] = useState(null)
-  const [mensaje, setMensaje] = useState(null)
-  // Se incrementa al terminar una subida de oferta: OfertaAdmin lo escucha
-  // para volver a consultar GET /api/oferta sin recargar la página.
-  const [refreshOfertaAdmin, setRefreshOfertaAdmin] = useState(0)
+  const [sesion, setSesion] = useState(leerSesion)
 
-  // Matriz de estudio del estudiante (para habilitar el horario automático).
-  const [matriz, setMatriz] = useState(null)
-  const [cargandoMatriz, setCargandoMatriz] = useState(false)
-  const [errorMatriz, setErrorMatriz] = useState(null)
-  // Descarta respuestas viejas si el estudiante cambia o sube otra matriz.
-  const solicitudMatrizRef = useRef(0)
-
-  // Carga (o recarga) la oferta y el horario del estudiante. Usa allSettled para
-  // que un endpoint caído no impida mostrar el otro.
-  const cargarDatos = useCallback(async (id, { limpiarMensaje = false } = {}) => {
-    if (id == null) return
-
-    if (limpiarMensaje) setMensaje(null)
-    setCargando(true)
-
-    const [resultadoOferta, resultadoHorario] = await Promise.allSettled([
-      apiGet('/api/oferta'),
-      apiGet(`/api/horario/${id}`),
-    ])
-
-    let error = null
-
-    if (resultadoOferta.status === 'fulfilled') {
-      setOferta(listaDeObjetos(resultadoOferta.value))
-    } else {
-      error = resultadoOferta.reason
-    }
-
-    if (resultadoHorario.status === 'fulfilled') {
-      setHorario(listaDeObjetos(resultadoHorario.value))
-    } else {
-      error = error || resultadoHorario.reason
-    }
-
-    if (error) {
-      setMensaje({
-        tipo: 'error',
-        texto: error.message || 'Ocurrió un error al cargar los datos.',
-        conexion: esErrorDeConexion(error),
-        reintentable: true,
-      })
-    }
-
-    setCargando(false)
-  }, [])
-
-  // Intenta recuperar la matriz ya registrada. Un 404 significa que el
-  // estudiante todavía no la ha cargado: no es un error, solo se muestra el
-  // formulario de carga.
-  const cargarMatriz = useCallback(async (id) => {
-    if (id == null) return null
-
-    const solicitud = ++solicitudMatrizRef.current
-    setCargandoMatriz(true)
-    setErrorMatriz(null)
-
+  useEffect(() => {
     try {
-      const datos = await apiGetOpcional(`/api/estudiante/${id}/matriz`)
-      if (solicitud !== solicitudMatrizRef.current) return null
-      setMatriz(datos ?? null)
-      return datos ?? null
-    } catch (error) {
-      if (solicitud !== solicitudMatrizRef.current) return null
-      // No se borra una matriz ya cargada: el fallo es de la consulta, no de
-      // los datos que el estudiante ya tenía en pantalla.
-      setErrorMatriz(
-        error.message || 'No se pudo consultar tu matriz de estudio.',
-      )
-      return null
-    } finally {
-      if (solicitud === solicitudMatrizRef.current) setCargandoMatriz(false)
+      if (sesion) {
+        window.localStorage.setItem(CLAVE_SESION, JSON.stringify(sesion))
+      } else {
+        window.localStorage.removeItem(CLAVE_SESION)
+      }
+    } catch {
+      // Si el navegador bloquea el almacenamiento, la sesión sigue en memoria.
     }
-  }, [])
+  }, [sesion])
 
-  function entrar(id) {
-    setEstudianteId(id)
-    setMensaje(null)
-    setMatriz(null)
-    setErrorMatriz(null)
-    cargarDatos(id)
-    cargarMatriz(id)
+  function manejarLogin(datos) {
+    const normalizada = normalizarSesion(datos)
+    if (normalizada) setSesion(normalizada)
   }
 
-  // La subida de la matriz ya trae su resumen: invalida cualquier GET en vuelo
-  // y desbloquea el botón de generar horario.
-  function actualizarMatriz(datos) {
-    solicitudMatrizRef.current += 1
-    setCargandoMatriz(false)
-    setErrorMatriz(null)
-    setMatriz(datos ?? null)
-  }
-
-  async function inscribir(nrcId) {
-    if (estudianteId == null || inscribiendoNrc != null) return
-
-    setMensaje(null)
-    setInscribiendoNrc(nrcId)
-
+  function cerrarSesion() {
+    setSesion(null)
     try {
-      const datos = await apiPost('/api/inscribir', {
-        estudiante_id: estudianteId,
-        nrc_id: nrcId,
-      })
-      setMensaje({
-        tipo: 'ok',
-        texto: (datos && datos.mensaje) || 'Inscripción exitosa.',
-      })
-      // Refresca oferta (cupos) y horario sin borrar el mensaje de éxito.
-      await cargarDatos(estudianteId)
-    } catch (error) {
-      setMensaje({
-        tipo: 'error',
-        texto: error.message || 'No se pudo completar la inscripción.',
-        conexion: esErrorDeConexion(error),
-        reintentable: false,
-      })
-    } finally {
-      setInscribiendoNrc(null)
+      window.localStorage.removeItem(CLAVE_SESION)
+    } catch {
+      // Sin acceso al almacenamiento; el estado en memoria ya está limpio.
     }
   }
 
-  function salir() {
-    solicitudMatrizRef.current += 1
-    setEstudianteId(null)
-    setOferta([])
-    setHorario([])
-    setMensaje(null)
-    setInscribiendoNrc(null)
-    setMatriz(null)
-    setCargandoMatriz(false)
-    setErrorMatriz(null)
-  }
-
-  function reintentar() {
-    if (estudianteId != null) {
-      cargarDatos(estudianteId, { limpiarMensaje: true })
-    }
-  }
-
-  // La matriz solo se considera cargada si el GET/POST devolvió datos; un 404
-  // deja el estado en null y muestra el formulario de carga.
-  const matrizCargada = matriz != null
+  const esAdmin = sesion?.rol === 'admin'
+  const nombreVisible = sesion
+    ? sesion.nombre ||
+      (esAdmin ? 'Administrador' : `Estudiante #${String(sesion.estudianteId)}`)
+    : ''
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-indigo-700 text-white shadow">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4">
-          <div>
-            <h1 className="text-xl font-bold leading-tight">Inscripción de Materias</h1>
-            <p className="text-xs text-indigo-200">
-              Portal del estudiante y panel administrativo
-            </p>
+      <header className="border-b border-indigo-800/40 bg-indigo-700 text-white shadow">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4">
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-lg font-bold shadow-inner"
+            >
+              🎓
+            </span>
+            <div>
+              <h1 className="text-xl font-bold leading-tight">
+                Inscripción de Materias
+              </h1>
+              <p className="text-xs text-indigo-200">
+                Ruta académica · Oferta real · Horario automático
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {vista === 'estudiante' && estudianteId != null && (
-              <span className="rounded-full bg-indigo-800/60 px-3 py-1 text-xs">
-                Estudiante ID: {estudianteId}
+          <div className="flex flex-wrap items-center gap-2">
+            {sesion ? (
+              <>
+                <div className="flex min-w-0 items-center gap-2.5 rounded-full bg-indigo-800/60 py-1.5 pl-1.5 pr-3">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-sm"
+                  >
+                    {esAdmin ? '🛡️' : '🎓'}
+                  </span>
+                  <span className="min-w-0 leading-tight">
+                    <span
+                      className="block max-w-[130px] truncate text-sm font-semibold sm:max-w-[220px]"
+                      title={nombreVisible}
+                    >
+                      {nombreVisible}
+                    </span>
+                    <span className="block text-[11px] text-indigo-200">
+                      {esAdmin
+                        ? 'Administrador'
+                        : `Estudiante · ID ${String(sesion.estudianteId)}`}
+                    </span>
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={cerrarSesion}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-300/60 bg-white/10 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                >
+                  <span aria-hidden="true">⎋</span>
+                  Salir
+                </button>
+              </>
+            ) : (
+              <span className="rounded-full bg-indigo-800/60 px-3 py-1.5 text-xs font-medium text-indigo-100">
+                Acceso
               </span>
-            )}
-
-            <nav
-              role="tablist"
-              aria-label="Seleccionar vista"
-              className="flex rounded-lg bg-indigo-800/60 p-1"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={vista === 'estudiante'}
-                onClick={() => setVista('estudiante')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  vista === 'estudiante' ? CLASE_TAB_ACTIVA : CLASE_TAB_INACTIVA
-                }`}
-              >
-                Vista Estudiante
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={vista === 'admin'}
-                onClick={() => setVista('admin')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  vista === 'admin' ? CLASE_TAB_ACTIVA : CLASE_TAB_INACTIVA
-                }`}
-              >
-                Vista Administrador
-              </button>
-            </nav>
-
-            {vista === 'estudiante' && estudianteId != null && (
-              <button
-                type="button"
-                onClick={salir}
-                className="rounded-md bg-indigo-500 px-3 py-1.5 text-sm font-medium hover:bg-indigo-400"
-              >
-                Salir
-              </button>
             )}
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        {vista === 'estudiante' && mensaje && (
-          <div className="mb-4">
-            <Banner
-              tipo={mensaje.tipo}
-              onCerrar={() => setMensaje(null)}
-              accion={
-                mensaje.reintentable && estudianteId != null ? (
-                  <button
-                    type="button"
-                    onClick={reintentar}
-                    className="rounded-md border border-red-300 bg-white px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
-                  >
-                    Reintentar
-                  </button>
-                ) : null
-              }
-            >
-              {mensaje.texto}
-            </Banner>
-          </div>
-        )}
-
-        {vista === 'admin' ? (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-semibold text-gray-800">
-                Panel de administración
-              </h2>
-              <p className="text-sm text-gray-500">
-                Carga la oferta académica y administra las reglas de
-                prerrequisitos.
-              </p>
-            </div>
-
-            <SubirOferta
-              onSubida={() => {
-                // La tabla de la oferta se refresca siempre; si además hay un
-                // estudiante logueado, se actualizan sus cupos y su horario.
-                setRefreshOfertaAdmin((actual) => actual + 1)
-                if (estudianteId != null) cargarDatos(estudianteId)
-              }}
-            />
-
-            <OfertaAdmin refreshKey={refreshOfertaAdmin} />
-
-            <AdminReglas />
-          </div>
-        ) : estudianteId == null ? (
-          <Login onEntrar={entrar} />
+      <main className="mx-auto max-w-7xl px-4 py-6">
+        {!sesion ? (
+          <Login onLogin={manejarLogin} />
+        ) : esAdmin ? (
+          <AdminPanel onLogout={cerrarSesion} />
         ) : (
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-xl font-semibold text-gray-800">Mi inscripción</h2>
-              {cargando && (
-                <Spinner label="Actualizando datos…" className="h-4 w-4" />
-              )}
-            </div>
-
-            <MatrizEstudiante
-              estudianteId={estudianteId}
-              matriz={matriz}
-              cargando={cargandoMatriz}
-              errorCarga={errorMatriz}
-              onMatrizCargada={actualizarMatriz}
-              onRecargar={() => cargarMatriz(estudianteId)}
-            />
-            <GenerarHorario
-              estudianteId={estudianteId}
-              matrizCargada={matrizCargada}
-              matrizCargando={cargandoMatriz}
-              onGenerado={() => cargarDatos(estudianteId, { limpiarMensaje: true })}
-            />
-            <Horario horario={horario} cargando={cargando} />
-            <OfertaTable
-              oferta={oferta}
-              onInscribir={inscribir}
-              inscribiendoNrc={inscribiendoNrc}
-              cargando={cargando}
-            />
-          </div>
+          <EstudiantePanel
+            estudianteId={sesion.estudianteId}
+            nombre={sesion.nombre}
+            onLogout={cerrarSesion}
+          />
         )}
       </main>
 
-      <footer className="mx-auto max-w-6xl px-4 pb-8 text-center text-xs text-gray-400">
+      <footer className="mx-auto max-w-7xl px-4 pb-8 text-center text-xs text-gray-400">
         API: <span className="font-mono">{API_BASE || 'mismo origen (proxy /api)'}</span>
       </footer>
     </div>

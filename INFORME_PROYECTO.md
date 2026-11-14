@@ -224,12 +224,12 @@ entre subagentes:
 | Capa | Archivo(s) | Estado |
 |---|---|---|
 | PostgreSQL | [`schema.sql`](./schema.sql) | ✅ |
-| Data Lake | [`datalake/ingesta_datalake.py`](./datalake/ingesta_datalake.py) · [`datalake/README_INGESTA.md`](./datalake/README_INGESTA.md) | ✅ |
+| Data Lake | [`datalake/ingesta_datalake.py`](./datalake/ingesta_datalake.py) · [`datalake/README_INGESTA.md`](./datalake/README_INGESTA.md) · [`datalake/malla_curricular.json`](./datalake/malla_curricular.json) · [`datalake/entrada/`](./datalake/entrada/) | ✅ |
 | MongoDB | [`mongo_schema.js`](./mongo_schema.js) | ✅ |
 | Neo4j | [`actualizar_grafo.py`](./actualizar_grafo.py) · [`neo4j_setup.cypher`](./neo4j_setup.cypher) | ✅ |
-| Backend | [`backend/main.py`](./backend/main.py) · [`backend/init_db.py`](./backend/init_db.py) · [`backend/requirements.txt`](./backend/requirements.txt) | ✅ |
-| Frontend | [`frontend/`](./frontend/) · [`src/api.js`](./frontend/src/api.js) · [`OfertaAdmin.jsx`](./frontend/src/components/OfertaAdmin.jsx) · [`SubirOferta.jsx`](./frontend/src/components/SubirOferta.jsx) · [`MatrizEstudiante.jsx`](./frontend/src/components/MatrizEstudiante.jsx) · [`AdminReglas.jsx`](./frontend/src/components/AdminReglas.jsx) · [`GenerarHorario.jsx`](./frontend/src/components/GenerarHorario.jsx) · [`Spinner.jsx`](./frontend/src/components/Spinner.jsx) | ✅ |
-| Reglas seed | [`seed_reglas.py`](./seed_reglas.py) (28 materias, `$setOnInsert`) | ✅ |
+| Backend | [`backend/main.py`](./backend/main.py) · [`backend/init_db.py`](./backend/init_db.py) · [`backend/requirements.txt`](./backend/requirements.txt) · [`seed_estudiantes.py`](./seed_estudiantes.py) | ✅ |
+| Frontend | [`frontend/`](./frontend/) · [`src/api.js`](./frontend/src/api.js) · [`Login.jsx`](./frontend/src/components/Login.jsx) · [`AdminPanel.jsx`](./frontend/src/components/AdminPanel.jsx) · [`MallaTab.jsx`](./frontend/src/components/MallaTab.jsx) · [`OfertaTab.jsx`](./frontend/src/components/OfertaTab.jsx) · [`ListaEstudiantes.jsx`](./frontend/src/components/ListaEstudiantes.jsx) · [`OfertaTableAdmin.jsx`](./frontend/src/components/OfertaTableAdmin.jsx) · [`UploadCard.jsx`](./frontend/src/components/UploadCard.jsx) · [`EstudiantePanel.jsx`](./frontend/src/components/EstudiantePanel.jsx) · [`PerfilForm.jsx`](./frontend/src/components/PerfilForm.jsx) · [`ResumenPerfil.jsx`](./frontend/src/components/ResumenPerfil.jsx) · [`HorarioResultado.jsx`](./frontend/src/components/HorarioResultado.jsx) | ✅ |
+| Reglas seed (opcional) | [`seed_reglas.py`](./seed_reglas.py) — desactivado por defecto; las reglas vienen de la malla real | ✅ |
 | Orquestación | [`docker-compose.yml`](./docker-compose.yml) (red + volúmenes de uploads) | ✅ |
 | Ejemplos CSV | [`datalake/ejemplos/oferta_academica.csv`](./datalake/ejemplos/oferta_academica.csv) · [`pruebas/oferta_academica.csv`](./pruebas/oferta_academica.csv) · [`pruebas/matriz_estudiante.csv`](./pruebas/matriz_estudiante.csv) | ✅ |
 | Eliminados | `seed_data.py` · `mongo_seed.js` | 🗑️ |
@@ -553,6 +553,333 @@ Luego: Admin sube [`pruebas/oferta_academica.csv`](./pruebas/oferta_academica.cs
 [`pruebas/matriz_estudiante.csv`](./pruebas/matriz_estudiante.csv) → resumen y
 botón habilitado → genera horario. Ya no debe aparecer
 `relation "estudiante" does not exist`.
+
+---
+
+## 12. Ingesta Real (Data Lake + PDF/Excel) y Flujo Completo — ✅ IMPLEMENTADO
+
+Se reemplazaron los datos ficticios por los **archivos reales** del sistema:
+un Excel de oferta (`chorarios 26082026.xlsx`) y un PDF de malla
+(`Ruta nueva ISUM V2 (2).pdf`). Todo pasa primero por el **Data Lake**
+(Bronze → Silver → Gold) antes de llegar a PostgreSQL/MongoDB.
+
+### 12.1 Archivos reales y estructura
+
+| Archivo | Estructura detectada |
+|---|---|
+| `datalake/entrada/chorarios_26082026.xlsx` | **4.869 filas × 43 columnas**; `PERIODO`, `NRC`, `ALFA`, `NUM`, `TITULO`, `CUPO`, `INSCRITOS`, `SALDO`, `NOMBRE_DOCENTE`, `SEDE`, `DESC_SEDE`, `HI`, `HF`, días `L/M/I/J/V/S/D` |
+| `datalake/entrada/ruta_nueva_isum_v2.pdf` | 1 página **escaneada sin capa de texto** (pdftotext vacío) |
+
+Reglas de parseo del Excel:
+- `codigo_curso = ALFA + NUM` (ej. `ISUM` + `BG042` = `ISUMBG042`).
+- Días: si la celda `L/M/I/J/V/S/D` no está vacía hay sesión (L=1 … D=7).
+- `HI/HF` vienen como enteros `HHMM` (915 → 09:15; 2030 → 20:30).
+- Solo `ESTADO_NRC = 'Activo'`; sedes `UMD/CBP/VGA/RUP`; jornada derivada de `HI`.
+
+### 12.2 Data Lake (Medallón)
+
+[`datalake/ingesta_datalake.py`](./datalake/ingesta_datalake.py) (2.546 líneas):
+
+- **Bronze:** copia cruda del Excel, PDF y JSON de malla.
+- **Silver:** `oferta.parquet` (1 fila/NRC), `horario.parquet` (1 fila/sesión),
+  `malla.parquet`, `docentes.parquet`, `sedes.parquet`.
+- **Gold:** `oferta_resumen.parquet` (ocupación por curso/sede/jornada) y
+  `malla_resumen.parquet`.
+- **PostgreSQL:** `curso`, `docente`, `sede`, `nrc`, `horario` con `UPSERT`;
+  migra esquemas viejos con `ADD COLUMN IF NOT EXISTS`; no borra
+  `inscripcion`/`historial`.
+- **MongoDB:** `malla_curricular` (upsert por programa+código) y
+  `reglas_negocio` (`$setOnInsert`, no pisa ediciones del Admin).
+- **PDF escaneado:** intento con `pdfplumber` → OCR opcional
+  (`pytesseract`+`tesseract`) → **fallback** a
+  [`datalake/malla_curricular.json`](./datalake/malla_curricular.json)
+  (transcripción asistida, editable desde el dashboard).
+
+**Resultado real de la ingesta (probado por el subagente con PostgreSQL/MongoDB
+temporales):** 888 cursos, 3.288 NRC, 3.852 sesiones, 840 docentes, 4 sedes
+(periodo 202660); malla de 59 cursos / 10 semestres; segunda corrida
+idempotente. `--solo-oferta` y `--solo-malla` permiten procesar cada archivo por
+separado sin leer el otro.
+
+### 12.3 Nuevos endpoints (backend)
+
+| Método | Ruta | Función |
+|---|---|---|
+| POST | `/api/admin/upload-oferta` | Excel/CSV → Data Lake → PostgreSQL |
+| POST | `/api/admin/upload-malla` | PDF → Data Lake → MongoDB |
+| GET/PUT | `/api/admin/malla` | Ver/editar malla (MongoDB) |
+| GET/PUT | `/api/admin/oferta` | Ver/editar NRC/horario (PostgreSQL) |
+| GET | `/api/catalogos` | Programas, jornadas y sedes |
+| POST | `/api/estudiante/perfil` | Programa/Jornada/Sede + matriz opcional |
+| GET | `/api/estudiante/{id}/perfil` | Resumen del perfil |
+| POST | `/api/horario/automatico` | Horario filtrado por sede/jornada y cupos |
+
+Sin matriz, el perfil asigna a `matriz_por_ver` los cursos del **primer
+semestre** de la malla. Con matriz (CSV/XLSX), separa aprobadas (`historial`) y
+pendientes. El generador filtra NRC por **sede y jornada** del perfil.
+
+### 12.4 Frontend
+
+- **Admin** ([`AdminPanel.jsx`](./frontend/src/components/AdminPanel.jsx)):
+  dos tarjetas (PDF malla / Excel oferta), botón **Ver Dashboard**, tablas
+  **editables** de Malla y Oferta con **Guardar Cambios** (PUT a Mongo/Postgres)
+  y sección de reglas.
+- **Estudiante** ([`EstudiantePanel.jsx`](./frontend/src/components/EstudiantePanel.jsx)):
+  selects Programa/Jornada/Sede, matriz opcional, tarjetas de resumen, botón
+  **Generar Horario Automático** y tabla con NRC, docente, sede, día, horas y
+  salón.
+- [`App.jsx`](./frontend/src/App.jsx) quedó como shell que alterna ambas vistas.
+
+### 12.5 Persistencia Docker
+
+[`docker-compose.yml`](./docker-compose.yml) monta `lake_bronze`,
+`lake_silver`, `lake_gold`, `uploads_data` y la carpeta
+`./datalake/entrada` (donde se dejan los archivos reales), además de
+`malla_curricular.json` de solo lectura.
+
+### 12.6 Cómo probar la carga real
+
+1. `docker compose down && docker compose up -d --build`
+2. Admin → **Malla Curricular (PDF)** → `datalake/entrada/ruta_nueva_isum_v2.pdf`.
+3. Admin → **Oferta Académica (Excel)** → `datalake/entrada/chorarios_26082026.xlsx`.
+4. **Ver Dashboard** → revisar/corregir celdas → **Guardar Cambios**.
+5. Estudiante → Programa *Ingeniería de Sistemas*, Jornada y Sede (p. ej.
+   `UMD`), matriz opcional → **Continuar** → **Generar Horario Automático**.
+
+> **Limitación conocida:** el PDF es un escaneo y el entorno no tiene Tesseract;
+> por eso se usa la transcripción asistida del JSON. El Admin puede corregir
+> códigos, créditos, semestre y prerrequisitos en el dashboard editable.
+
+---
+
+## 13. Seguridad, Login y UX del Dashboard — ✅ IMPLEMENTADO
+
+### 13.1 Login y sesión
+
+`POST /api/auth/login`:
+
+| Rol | Body | Respuesta |
+|---|---|---|
+| Admin | `{rol:'admin', usuario:'admin', password:'Hola12345'}` | `{ok, rol:'admin', token, usuario}` · `401` si falla |
+| Estudiante | `{rol:'estudiante', estudiante_id:1}` | `{ok, rol:'estudiante', token, estudiante_id, nombre, nuevo}` |
+
+- **Registro implícito:** si el ID no existe, se crea `Estudiante <id>` con
+  `plan_id='IS-2024'` y se responde `nuevo:true`; el frontend muestra el
+  formulario de Programa/Jornada/Sede.
+- El **token** es opaco (`secrets.token_urlsafe`) y se guarda en
+  `localStorage`; **no se exige** en los demás endpoints (identificador de
+  sesión, no autenticación completa). Limitación documentada.
+- `estudiante.plan_id` pasó a **TEXT** (`'IS-2024'`), con migración idempotente
+  en `init_db.py`.
+
+### 13.2 Seed de estudiantes
+
+[`seed_estudiantes.py`](./seed_estudiantes.py) inserta/actualiza **10
+estudiantes** (IDs 1–10, nombres realistas, `plan_id='IS-2024'`) de forma
+idempotente y ajusta la secuencia. Se copia al contenedor en el Dockerfile.
+
+```bash
+docker compose exec backend python seed_estudiantes.py
+```
+
+### 13.3 Dashboard del Administrador (pestañas)
+
+[`AdminPanel.jsx`](./frontend/src/components/AdminPanel.jsx) ahora usa
+**pestañas sin recargar**:
+
+1. **Carga de Archivos** — tarjetas para PDF (malla) y Excel (oferta).
+2. **Ver Oferta Académica** — [`OfertaTableAdmin.jsx`](./frontend/src/components/OfertaTableAdmin.jsx)
+   con **paginación de 10 filas**, búsqueda (NRC/materia/docente/sede/jornada)
+   y modo **solo lectura**.
+3. **Editar Reglas** — [`AdminReglas.jsx`](./frontend/src/components/AdminReglas.jsx)
+   con borrador local, botón sticky **“Guardar Cambios”** y “Descartar”.
+4. **Lista de Estudiantes** — [`ListaEstudiantes.jsx`](./frontend/src/components/ListaEstudiantes.jsx)
+   **solo lectura** (sin inputs ni PUT/DELETE), con búsqueda y conteos.
+
+### 13.4 Flujo del Estudiante
+
+[`Login.jsx`](./frontend/src/components/Login.jsx) tiene dos pestañas
+(Estudiante ID / Administrador usuario+contraseña). [`App.jsx`](./frontend/src/App.jsx)
+mantiene la sesión global y, según el rol, monta `AdminPanel` o
+`EstudiantePanel`. El estudiante:
+- si **no tiene perfil** (404), completa Programa/Jornada/Sede (y matriz
+  opcional) con su ID;
+- si **ya tiene perfil**, ve el resumen y el botón **Generar Horario Automático**.
+
+### 13.5 Cómo probar
+
+```bash
+cd /home/diego/Documentos/InscripcionMaterias
+docker compose up -d --build
+docker compose exec backend python seed_estudiantes.py
+```
+
+- **Admin:** pestaña Administrador → usuario `admin`, contraseña `Hola12345`.
+- **Estudiante:** pestaña Estudiante → ID del **1 al 10** (ya sembrados).
+- **Nuevo estudiante:** ID libre (p. ej. `11` o `99`) → registro implícito →
+  formulario de Programa/Jornada/Sede.
+
+---
+
+## 14. Idempotencia de Horario y Vista de la Malla — ✅ IMPLEMENTADO
+
+### 14.1 Horario guardado (solo lectura)
+
+`GET /api/estudiante/horario/{estudiante_id}` devuelve el horario **ya
+inscrito**, agrupado por NRC:
+
+```json
+{
+  "estudiante_id": 1,
+  "periodo": "202660",
+  "total": 3,
+  "horario": [
+    {"codigo":"ISUMBG043","materia":"...","creditos":3,"nrc_id":123,
+     "docente_nombre":"...","sede_nombre":"...",
+     "sesiones":[{"dia":1,"dia_nombre":"Lunes","hora_inicio":"07:00:00",
+                  "hora_fin":"08:30:00","salon":"...","edificio":"..."}]}
+  ]
+}
+```
+
+Sin inscripciones responde `200` con `total: 0` y `horario: []` (nunca 404).
+
+### 14.2 POST /api/horario/automatico idempotente
+
+Antes de generar, el backend determina el **periodo vigente**
+(`PERIODO_ACTUAL` o `MAX(nrc.periodo)`) y comprueba si el estudiante ya tiene
+inscripciones en ese periodo:
+
+- **Si ya tiene:** no genera ni inserta; responde `200` con
+  `{ok:true, ya_existe:true, mensaje, estudiante_id, periodo, resumen, horario, no_asignadas:[]}`.
+- **Si no tiene:** ejecuta la generación normal y añade `ya_existe:false`.
+- La inserción usa `INSERT ... ON CONFLICT (estudiante_id, nrc_id) DO NOTHING`
+  para blindar contra duplicados por concurrencia.
+
+Esto elimina los errores de cupo/choque al pulsar “Generar” repetidamente: la
+segunda vez devuelve el horario existente.
+
+### 14.3 Malla agrupada por semestre
+
+`GET /api/admin/malla` devuelve por defecto:
+
+```json
+{"ok":true,"programa":"INGENIERÍA DE SISTEMAS","programas":["..."],
+ "total":59,"semestres":[{"semestre":1,"cursos":[{"codigo","nombre","creditos","horas","prerrequisitos":[]}]}]}
+```
+
+`?plano=1` o `?formato=plano` conservan la lista plana anterior (compatibilidad
+con `AdminDashboard.jsx`, que ya no se monta).
+
+### 14.4 Frontend
+
+- **Admin:** nueva pestaña **“Ver Malla Curricular”**
+  ([`MallaTab.jsx`](./frontend/src/components/MallaTab.jsx)) con acordeón por
+  semestre, primer semestre abierto, expandir/contraer, recarga y chips de
+  prerrequisitos. Tolera el contrato agrupado y el plano.
+- **Estudiante:** al montar (y al recuperar el perfil) llama
+  `GET /api/estudiante/horario/{id}`. Si hay horario, lo muestra de inmediato y
+  **deshabilita** el botón con el texto **“Horario ya generado”**. Si el POST
+  responde `ya_existe:true`, muestra el horario con un banner **informativo**
+  (no rojo), no un error. Tras generar, refresca el horario guardado.
+
+### 14.5 Cómo probar la persistencia
+
+```bash
+cd /home/diego/Documentos/InscripcionMaterias
+docker compose down
+docker compose up -d --build
+```
+
+1. Entra como estudiante (ID 1–10), completa perfil y pulsa **Generar Horario Automático**.
+2. Verifica en BD:
+   ```bash
+   docker compose exec postgres psql -U postgres -d universidad \
+     -c "SELECT estudiante_id, nrc_id FROM inscripcion WHERE estudiante_id = 1;"
+   ```
+3. **Recarga la página (F5)**: el horario debe seguir visible y el botón debe
+   decir **“Horario ya generado”**.
+4. Prueba la API:
+   ```bash
+   curl http://localhost:8000/api/estudiante/horario/1
+   curl -X POST http://localhost:8000/api/horario/automatico \
+     -H "Content-Type: application/json" -d '{"estudiante_id":1}'
+   ```
+   La segunda llamada debe devolver `"ya_existe": true` con el mismo horario.
+
+---
+
+## 15. Invalidación del Horario al Cambiar el Perfil — ✅ IMPLEMENTADO
+
+### 15.1 Problema
+El horario quedaba persistido en `inscripcion`. Si el estudiante cambiaba
+**programa, jornada o sede**, el POST idempotente seguía devolviendo el horario
+viejo y los cupos de `nrc` permanecían ocupados, impidiendo generar uno nuevo.
+
+### 15.2 Regla implementada (backend)
+
+En `POST`/`PUT /api/estudiante/perfil`, dentro de la **misma transacción** del
+guardado:
+
+1. Se lee el perfil previo (`programa, semestre, jornada, sede`).
+2. Se comparan de forma tolerante (sin acentos/mayúsculas/espacios) los valores
+   efectivos de **programa, jornada y sede**.
+3. Si hubo **cambio real** y el estudiante tiene inscripciones:
+   - `SELECT nrc_id, COUNT(*) ... GROUP BY nrc_id` (conteo local por NRC).
+   - `DELETE FROM inscripcion WHERE estudiante_id = ...` (libera el horario).
+   - Por cada NRC: `inscritos = GREATEST(inscritos - n, 0)` y
+     `saldo = GREATEST(cupo_max - inscritos, 0)`; se conservan los inscritos
+     externos de la oferta.
+4. `COMMIT` atómico; cualquier error hace `ROLLBACK` de perfil + borrado +
+   contadores.
+5. Si no hubo cambio (mismos valores o solo se actualizó la matriz), **no se
+   borra nada**.
+
+Respuesta ampliada:
+
+```json
+{"horario_invalidado": true|false, "nrc_liberados": N,
+ "mensaje": "Perfil actualizado. Tu horario anterior fue liberado, por favor genera uno nuevo."}
+```
+
+Esto desbloquea `/api/horario/automatico`: al no existir inscripciones del
+periodo, `_tiene_inscripciones_periodo()` devuelve false y se genera uno nuevo.
+
+### 15.3 Refresco en el frontend
+
+[`EstudiantePanel.jsx`](./frontend/src/components/EstudiantePanel.jsx), al
+guardar el perfil:
+
+- Si `horario_invalidado === true`: vacía `horarioGuardado` y `resultado`,
+  limpia mensajes de error y muestra exactamente
+  **“Perfil actualizado. Tu horario anterior fue liberado, por favor genera uno nuevo.”**
+- Al quedar `horarioGuardado = null`, `horarioExistente` pasa a false y el botón
+  **“Generar Horario Automático”** vuelve a habilitarse.
+- Si la bandera no viene o es false, conserva el comportamiento anterior.
+
+### 15.4 Cómo probarlo
+
+```bash
+cd /home/diego/Documentos/InscripcionMaterias
+docker compose down
+docker compose up -d --build
+```
+
+1. Login estudiante (ID 1–10), completa perfil y **genera horario**.
+2. Verifica las inscripciones:
+   ```bash
+   docker compose exec postgres psql -U postgres -d universidad \
+     -c "SELECT estudiante_id, nrc_id FROM inscripcion WHERE estudiante_id = 1;"
+   ```
+3. Pulsa **“Cambiar datos”**, modifica **Jornada** (o Sede/Programa) y guarda.
+4. Debes ver el mensaje de liberación y el botón **habilitado** de nuevo.
+5. Vuelve a consultar: `SELECT COUNT(*) ...` debe dar **0** para ese estudiante
+   y los NRC deben recuperar cupo (`saldo`).
+6. Pulsa **Generar Horario Automático**: ahora sí crea un horario nuevo.
+
+
+
+
 
 
 

@@ -28,11 +28,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/main.py ./main.py
 COPY backend/init_db.py ./init_db.py
 COPY seed_reglas.py ./seed_reglas.py
+# Seed de 10 estudiantes de ejemplo. Ejecutable también dentro del contenedor:
+#   docker compose exec backend python seed_estudiantes.py
+COPY seed_estudiantes.py ./seed_estudiantes.py
 
 # 3. Script de ingesta en /app/datalake/ (la API lo localiza desde __file__:
-#    /app/datalake/ingesta_datalake.py).
+#    /app/datalake/ingesta_datalake.py) y la transcripción asistida de la malla
+#    como fallback cuando el PDF es un escaneo sin capa de texto.
 RUN mkdir -p /app/datalake
 COPY datalake/ingesta_datalake.py ./datalake/ingesta_datalake.py
+COPY datalake/malla_curricular.json ./datalake/malla_curricular.json
 
 # 4. Directorios de escritura: uploads de CSV y capas Bronze/Silver.
 #    docker-compose monta volúmenes persistentes sobre ellos.

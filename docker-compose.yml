@@ -41,13 +41,20 @@ services:
       DB_PASSWORD: postgres
       MONGO_URI: mongodb://mongo:27017
       MONGO_DB: inscripcion
-      # Carpeta donde se guardan los CSV subidos por el admin/estudiante.
+      # Las reglas se cargan desde la malla real; el seed legacy queda off.
+      SEED_REGLAS_LEGACY: "0"
+      # Carpeta donde se guardan los CSV/Excel/PDF subidos.
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads_data:/app/uploads
-      # Persistencia de las capas Bronze/Silver del Data Lake.
+      # Persistencia del Data Lake (Bronze/Silver/Gold).
       - lake_bronze:/app/datalake/bronze
       - lake_silver:/app/datalake/silver
+      - lake_gold:/app/datalake/gold
+      # Carpeta donde el Admin puede dejar los archivos reales (Excel/PDF).
+      - ./datalake/entrada:/app/datalake/entrada
+      # Transcripción asistida de la malla (fallback del PDF escaneado).
+      - ./datalake/malla_curricular.json:/app/datalake/malla_curricular.json:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -140,6 +147,7 @@ volumes:
   uploads_data:
   lake_bronze:
   lake_silver:
+  lake_gold:
 
 networks:
   inscripcion_net:

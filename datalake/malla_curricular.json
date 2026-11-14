@@ -1,0 +1,76 @@
+{
+  "programa": "INGENIERÍA DE SISTEMAS",
+  "sede": "BOGOTÁ",
+  "fuente": "Ruta nueva ISUM V2 (2).pdf",
+  "nota": "El PDF es un escaneo sin capa de texto. Esta es una transcripción asistida (best-effort) del plan de estudios; el Admin puede corregir códigos, nombres, créditos, semestre y prerrequisitos desde el dashboard editable.",
+  "cursos": [
+    {"semestre": 1, "codigo": "ISUMBG013", "nombre": "Programación Básica", "creditos": 3, "horas": 4, "prerrequisitos": []},
+    {"semestre": 1, "codigo": "ISUMBG021", "nombre": "Introducción a la Ingeniería", "creditos": 1, "horas": 2, "prerrequisitos": []},
+    {"semestre": 1, "codigo": "MATE1020", "nombre": "Precálculo", "creditos": 3, "horas": 6, "prerrequisitos": []},
+    {"semestre": 1, "codigo": "LENG1010", "nombre": "Comunicación Escrita y Procesos Lectores I", "creditos": 2, "horas": 2, "prerrequisitos": []},
+    {"semestre": 1, "codigo": "FHUM1010", "nombre": "Proyecto de Vida", "creditos": 2, "horas": 2, "prerrequisitos": []},
+    {"semestre": 1, "codigo": "ING1010", "nombre": "Gestión Básica de la Información", "creditos": 2, "horas": 2, "prerrequisitos": []},
+
+    {"semestre": 2, "codigo": "ISUMBG023", "nombre": "Programación Orientada a Objetos", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG013"]},
+    {"semestre": 2, "codigo": "ISUMBG011", "nombre": "Lógica Matemática", "creditos": 3, "horas": 4, "prerrequisitos": []},
+    {"semestre": 2, "codigo": "MATE1061", "nombre": "Cálculo Diferencial", "creditos": 3, "horas": 4, "prerrequisitos": ["MATE1020"]},
+    {"semestre": 2, "codigo": "INGL1010", "nombre": "Inglés I", "creditos": 3, "horas": 4, "prerrequisitos": []},
+    {"semestre": 2, "codigo": "LENG1020", "nombre": "Comunicación Escrita y Procesos Lectores II", "creditos": 2, "horas": 2, "prerrequisitos": ["LENG1010"]},
+    {"semestre": 2, "codigo": "FHUM1020", "nombre": "Cátedra Minuto de Dios", "creditos": 2, "horas": 2, "prerrequisitos": []},
+    {"semestre": 2, "codigo": "IAGRBG021", "nombre": "Metodología de la Investigación", "creditos": 2, "horas": 3, "prerrequisitos": []},
+
+    {"semestre": 3, "codigo": "ISUMBG033", "nombre": "Estructuras de Datos", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG023"]},
+    {"semestre": 3, "codigo": "MATE1051", "nombre": "Cálculo Integral", "creditos": 3, "horas": 4, "prerrequisitos": ["MATE1061"]},
+    {"semestre": 3, "codigo": "FIS1010", "nombre": "Física Mecánica", "creditos": 3, "horas": 4, "prerrequisitos": ["MATE1061"]},
+    {"semestre": 3, "codigo": "MATE1036", "nombre": "Álgebra Lineal", "creditos": 3, "horas": 4, "prerrequisitos": ["MATE1020"]},
+    {"semestre": 3, "codigo": "INGL1020", "nombre": "Inglés II", "creditos": 3, "horas": 4, "prerrequisitos": ["INGL1010"]},
+    {"semestre": 3, "codigo": "ADM1060", "nombre": "Emprendimiento", "creditos": 2, "horas": 2, "prerrequisitos": []},
+
+    {"semestre": 4, "codigo": "INGL1030", "nombre": "Inglés III", "creditos": 3, "horas": 4, "prerrequisitos": ["INGL1020"]},
+    {"semestre": 4, "codigo": "FIS1040", "nombre": "Física Eléctrica", "creditos": 3, "horas": 4, "prerrequisitos": ["FIS1010"]},
+    {"semestre": 4, "codigo": "ISUMBG103", "nombre": "Sistemas Operativos", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG033"]},
+    {"semestre": 4, "codigo": "PRAC1020", "nombre": "Desarrollo Social Contemporáneo", "creditos": 2, "horas": 2, "prerrequisitos": []},
+
+    {"semestre": 5, "codigo": "ISUMBG043", "nombre": "Programación Web", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG033"]},
+    {"semestre": 5, "codigo": "ISUMBG063", "nombre": "Ingeniería de Software", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG033"]},
+    {"semestre": 5, "codigo": "ISUMBG193", "nombre": "Bases de Datos", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG033"]},
+    {"semestre": 5, "codigo": "ISUMBG113", "nombre": "Redes de Computadores", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG103"]},
+    {"semestre": 5, "codigo": "ESTA1090", "nombre": "Estadística I", "creditos": 3, "horas": 4, "prerrequisitos": ["MATE1051"]},
+    {"semestre": 5, "codigo": "PRAC1010", "nombre": "Práctica en Responsabilidad Social", "creditos": 3, "horas": 2, "prerrequisitos": []},
+    {"semestre": 5, "codigo": "ISUMBG012", "nombre": "Electiva CMD", "creditos": 2, "horas": 2, "prerrequisitos": []},
+    {"semestre": 5, "codigo": "ISUMBG042", "nombre": "Electiva CMD Ingenieros sin Fronteras", "creditos": 3, "horas": 3, "prerrequisitos": []},
+
+    {"semestre": 6, "codigo": "ISUMBG053", "nombre": "Desarrollo Basado en Plataformas", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG043"]},
+    {"semestre": 6, "codigo": "ISUMBG073", "nombre": "Diseño de Algoritmos", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG033"]},
+    {"semestre": 6, "codigo": "ISUMBG123", "nombre": "Interconectividad", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG113"]},
+    {"semestre": 6, "codigo": "ISUMBG213", "nombre": "Arquitectura de Datos", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG193"]},
+    {"semestre": 6, "codigo": "MATE1130", "nombre": "Ecuaciones Diferenciales", "creditos": 3, "horas": 4, "prerrequisitos": ["MATE1051"]},
+    {"semestre": 6, "codigo": "ETIC190", "nombre": "Ética Profesional", "creditos": 2, "horas": 2, "prerrequisitos": []},
+    {"semestre": 6, "codigo": "ISUMBG054", "nombre": "Electiva CPC", "creditos": 2, "horas": 2, "prerrequisitos": []},
+
+    {"semestre": 7, "codigo": "ISUMBG083", "nombre": "Arquitectura de Software", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG063"]},
+    {"semestre": 7, "codigo": "ISUMBG133", "nombre": "Estructura de Internet, Servicios y Servidores", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG123"]},
+    {"semestre": 7, "codigo": "ISUMBG173", "nombre": "Ingeniería Económica", "creditos": 2, "horas": 4, "prerrequisitos": []},
+    {"semestre": 7, "codigo": "ISUMBG022", "nombre": "Electiva CMD", "creditos": 2, "horas": 2, "prerrequisitos": []},
+    {"semestre": 7, "codigo": "MATE1110", "nombre": "Matemática Discreta", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG011"]},
+
+    {"semestre": 8, "codigo": "ISUMBG143", "nombre": "Seguridad de la Información", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG133"]},
+    {"semestre": 8, "codigo": "ISUMBG153", "nombre": "Calidad y Gestión de Proyectos Informáticos", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG143"]},
+    {"semestre": 8, "codigo": "ISUMBG223", "nombre": "Bases de Datos Masivas", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG213"]},
+    {"semestre": 8, "codigo": "CBAS8051", "nombre": "Métodos Numéricos", "creditos": 3, "horas": 4, "prerrequisitos": ["MATE1110"]},
+    {"semestre": 8, "codigo": "ISUMBG032", "nombre": "Electiva CMD", "creditos": 2, "horas": 2, "prerrequisitos": []},
+    {"semestre": 8, "codigo": "ISUMBG064", "nombre": "Práctica Profesional", "creditos": 2, "horas": 2, "prerrequisitos": []},
+
+    {"semestre": 9, "codigo": "ISUMBG243", "nombre": "Minería de Datos", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG223"]},
+    {"semestre": 9, "codigo": "ISUMBG253", "nombre": "Gestión de la Infraestructura", "creditos": 3, "horas": 4, "prerrequisitos": ["ISUMBG243"]},
+    {"semestre": 9, "codigo": "ISUMBG093", "nombre": "Electiva CP", "creditos": 2, "horas": 4, "prerrequisitos": []},
+    {"semestre": 9, "codigo": "ISUMBG024", "nombre": "Electiva CPC", "creditos": 2, "horas": 2, "prerrequisitos": []},
+    {"semestre": 9, "codigo": "ISUMBG062", "nombre": "Electiva CMD", "creditos": 2, "horas": 2, "prerrequisitos": []},
+
+    {"semestre": 10, "codigo": "ISUMBG263", "nombre": "Electiva CP", "creditos": 3, "horas": 4, "prerrequisitos": []},
+    {"semestre": 10, "codigo": "ISUMBG183", "nombre": "Electiva CP", "creditos": 2, "horas": 2, "prerrequisitos": []},
+    {"semestre": 10, "codigo": "ISUMBG034", "nombre": "Electiva CPC", "creditos": 2, "horas": 2, "prerrequisitos": []},
+    {"semestre": 10, "codigo": "ISUMBG074", "nombre": "Opción de Grado", "creditos": 2, "horas": 2, "prerrequisitos": []},
+    {"semestre": 10, "codigo": "ISUMBG031", "nombre": "Seminario de Investigación en Ingeniería", "creditos": 2, "horas": 2, "prerrequisitos": []}
+  ]
+}

@@ -1,0 +1,6 @@
+Wheel-Version: 1.0
+Generator: maturin (1.14.1)
+Root-Is-Purelib: false
+Tag: cp315-abi3-manylinux_2_34_x86_64
+Tag: cp315-abi3t-manylinux_2_34_x86_64
+

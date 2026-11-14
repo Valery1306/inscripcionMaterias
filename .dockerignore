@@ -1,0 +1,17 @@
+# Contexto de build del backend (raíz del repo). Reduce el tamaño enviado.
+.git
+.gitignore
+**/__pycache__
+**/*.pyc
+.venv
+venv
+node_modules
+frontend/node_modules
+frontend/dist
+datalake/bronze
+datalake/silver
+datalake/gold
+datalake/entrada
+.tmp_inspect
+uploads
+*.log
