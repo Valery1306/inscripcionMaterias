@@ -56,15 +56,19 @@ export default function AdminPanel({ onLogout, onSubida } = {}) {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+      <header className="card relative flex flex-wrap items-center justify-between gap-4 overflow-hidden p-6 sm:p-7">
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-indigo-500 to-indigo-700"
+        />
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">
             Administración
           </p>
-          <h2 className="mt-1 text-2xl font-bold text-gray-900">
+          <h2 className="mt-1 text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
             Panel de administración
           </h2>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
             Carga la malla y la oferta, consulta los datos académicos y
             administra las reglas de prerrequisitos.
           </p>
@@ -86,7 +90,7 @@ export default function AdminPanel({ onLogout, onSubida } = {}) {
         </div>
       </header>
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-1.5 shadow-sm">
+      <nav className="z-20 sm:sticky sm:top-[76px] rounded-2xl border border-gray-200/80 bg-white/90 p-1.5 shadow-md backdrop-blur">
         <div
           role="tablist"
           aria-label="Secciones del panel de administración"
@@ -104,10 +108,10 @@ export default function AdminPanel({ onLogout, onSubida } = {}) {
                 aria-selected={activa}
                 aria-controls="admin-panel"
                 onClick={() => setPestana(item.id)}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${
+                className={`inline-flex flex-1 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 ${
                   activa
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-800'
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
+                    : 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-700'
                 }`}
               >
                 <span aria-hidden="true">{item.icono}</span>
@@ -116,7 +120,7 @@ export default function AdminPanel({ onLogout, onSubida } = {}) {
             )
           })}
         </div>
-      </div>
+      </nav>
 
       <div
         id="admin-panel"

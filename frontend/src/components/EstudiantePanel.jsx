@@ -1068,18 +1068,22 @@ export default function EstudiantePanel({
 
   return (
     <section aria-labelledby="panel-estudiante-titulo" className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-4">
+      <header className="card relative flex flex-wrap items-center justify-between gap-4 overflow-hidden p-6 sm:p-7">
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-0 left-0 w-1.5 bg-gradient-to-b from-indigo-500 to-indigo-700"
+        />
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">
             Portal del estudiante
           </p>
           <h2
             id="panel-estudiante-titulo"
-            className="mt-1 text-2xl font-bold text-gray-900"
+            className="mt-1 text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl"
           >
             Hola, {nombreMostrado}
           </h2>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
             Estás identificado con el ID{' '}
             <span className="font-mono font-semibold text-gray-700">
               #{idValido ? String(id) : '—'}

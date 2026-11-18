@@ -109,22 +109,26 @@ export default function App() {
     : ''
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="border-b border-indigo-800/40 bg-indigo-700 text-white shadow">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4">
+    <div className="flex min-h-screen flex-col">
+      <header className="sticky top-0 z-30 bg-gradient-to-r from-indigo-900 via-indigo-800 to-indigo-700 text-white shadow-md">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <span
               aria-hidden="true"
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-lg font-bold shadow-inner"
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-xl shadow-md ring-1 ring-white/40"
             >
               🎓
             </span>
             <div>
-              <h1 className="text-xl font-bold leading-tight">
+              <h1 className="text-lg font-bold leading-tight tracking-tight text-white sm:text-xl">
                 Inscripción de Materias
               </h1>
-              <p className="text-xs text-indigo-200">
-                Ruta académica · Oferta real · Horario automático
+              <p className="hidden text-xs font-medium text-indigo-200 sm:block">
+                Ruta académica
+                <span className="mx-1.5 text-indigo-400">•</span>
+                Oferta real
+                <span className="mx-1.5 text-indigo-400">•</span>
+                Horario automático
               </p>
             </div>
           </div>
@@ -172,7 +176,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6">
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
         {!sesion ? (
           <Login onLogin={manejarLogin} />
         ) : esAdmin ? (
@@ -186,8 +190,21 @@ export default function App() {
         )}
       </main>
 
-      <footer className="mx-auto max-w-7xl px-4 pb-8 text-center text-xs text-gray-400">
-        API: <span className="font-mono">{API_BASE || 'mismo origen (proxy /api)'}</span>
+      <footer className="border-t border-gray-200 bg-white/70 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-2 px-4 py-5 text-xs text-gray-500 sm:flex-row sm:px-6 lg:px-8">
+          <p>
+            <span className="font-semibold text-gray-700">
+              Inscripción de Materias
+            </span>{' '}
+            · Proyecto de Arquitectura de Datos
+          </p>
+          <p>
+            API:{' '}
+            <span className="font-mono text-gray-600">
+              {API_BASE || 'mismo origen (proxy /api)'}
+            </span>
+          </p>
+        </div>
       </footer>
     </div>
   )
