@@ -1,0 +1,2 @@
+# Los scripts de Bash deben conservar finales de línea LF (con CRLF fallan).
+*.sh text eol=lf
